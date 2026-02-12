@@ -1,5 +1,7 @@
 "use client";
 import { useState, useRef } from 'react';
+import { storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { X, Upload, Check, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -47,21 +49,38 @@ export default function UploadModal({ onClose }) {
         setUploading(true);
         setStatus('idle');
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('title', e.target.title.value);
-        formData.append('description', e.target.description.value);
-
         try {
-            console.log("Client: Sending POST request to /api/photos");
+            // 1. Upload to Firebase Storage directly from Client
+            // This bypasses Vercel's 5MB payload limit
+            console.log("Client: Uploading binary to Firebase Storage...");
+            const filename = `${Date.now()}-${file.name.replace(/\s+/g, '-').toLowerCase()}`;
+            const storagePath = `uploads/${filename}`;
+            const storageRef = ref(storage, storagePath);
+            
+            await uploadBytes(storageRef, file);
+            console.log("Client: Storage upload successful");
+            
+            const downloadURL = await getDownloadURL(storageRef);
+            console.log(`Client: Got download URL: ${downloadURL}`);
+
+            // 2. Send Metadata to API (small JSON payload)
+            console.log("Client: Sending metadata to /api/photos");
             const res = await fetch('/api/photos', {
                 method: 'POST',
-                body: formData,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    src: downloadURL,
+                    title: e.target.title.value || 'Untitled',
+                    description: e.target.description.value || '',
+                    storagePath: storagePath
+                }),
             });
 
             if (res.ok) {
                 const data = await res.json();
-                console.log("Client: Upload successful", data);
+                console.log("Client: Metadata saved successfully", data);
                 setStatus('success');
                 setTimeout(() => {
                     onClose();
@@ -75,19 +94,18 @@ export default function UploadModal({ onClose }) {
                         const errorData = JSON.parse(text);
                         errorMsg = errorData.error || errorMsg;
                     } catch (parseError) {
-                        // If not JSON, show start of the response (might be HTML error page from Vercel)
                         errorMsg += ": " + text.substring(0, 100);
                     }
                 } catch (e) {
                     errorMsg += " - Could not read response body";
                 }
                 console.error("Client: Server error:", errorMsg);
-                alert("Upload failed: " + errorMsg);
+                alert("Metadata save failed: " + errorMsg);
                 setStatus('error');
             }
         } catch (error) {
-            console.error("Client: Fetch error:", error);
-            alert("Upload failed (Network/Fetch Error): " + error.message);
+            console.error("Client: Upload process error:", error);
+            alert("Upload failed: " + error.message);
             setStatus('error');
         } finally {
             setUploading(false);

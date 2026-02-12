@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, storage } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, doc, deleteDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, deleteObject } from 'firebase/storage';
 
 export async function GET() {
     try {
@@ -19,48 +19,25 @@ export async function GET() {
 }
 
 export async function POST(request) {
-    console.log("POST /api/photos upload requested");
+    console.log("POST /api/photos metadata save requested");
     try {
-        const formData = await request.formData();
-        const file = formData.get('file');
-        const title = formData.get('title') || 'Untitled';
-        const description = formData.get('description') || '';
+        const body = await request.json();
+        const { src, title, description, storagePath } = body;
 
-        console.log(`Received file: ${file?.name}, size: ${file?.size}, title: ${title}`);
+        console.log(`Received metadata for: ${title}`);
 
-        if (!file) {
-            console.error("No file in formData");
-            return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+        if (!src) {
+            console.error("Missing source URL in request body");
+            return NextResponse.json({ error: 'Missing source URL' }, { status: 400 });
         }
-
-        const bytes = await file.arrayBuffer();
-        const buffer = new Uint8Array(bytes);
-        console.log("Converted file to Uint8Array");
-
-        // Create unique filename
-        const filename = `${Date.now()}-${file.name.replace(/\s+/g, '-').toLowerCase()}`;
-        const storageRef = ref(storage, 'uploads/' + filename);
-        console.log(`Uploading to storage path: uploads/${filename}`);
-
-        // Upload to Firebase Storage
-        try {
-            await uploadBytes(storageRef, buffer);
-            console.log("Upload to Storage successful");
-        } catch (storageErr) {
-            console.error("Firebase Storage upload failed:", storageErr);
-            throw new Error(`Storage error: ${storageErr.message}`);
-        }
-
-        const downloadURL = await getDownloadURL(storageRef);
-        console.log(`Got download URL: ${downloadURL}`);
 
         // Save metadata to Firestore
         const newPhoto = {
-            src: downloadURL,
-            title,
-            description,
+            src,
+            title: title || 'Untitled',
+            description: description || '',
             date: new Date().toISOString(),
-            storagePath: 'uploads/' + filename
+            storagePath: storagePath || null
         };
 
         try {
@@ -69,12 +46,12 @@ export async function POST(request) {
             return NextResponse.json({ id: docRef.id, ...newPhoto }, { status: 201 });
         } catch (dbErr) {
             console.error("Firestore save failed:", dbErr);
-            throw new Error(`Database error: ${dbErr.message}`);
+            return NextResponse.json({ error: 'Database save failed: ' + dbErr.message }, { status: 500 });
         }
 
     } catch (error) {
-        console.error('Final upload catch error:', error);
-        return NextResponse.json({ error: 'Upload failed: ' + error.message }, { status: 500 });
+        console.error('Final metadata save catch error:', error);
+        return NextResponse.json({ error: 'Request parse failed: ' + error.message }, { status: 500 });
     }
 }
 
