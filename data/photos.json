@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "src": "/uploads/placeholder-1.svg",
+    "title": "Mountain Sunset",
+    "description": "A beautiful sunset over the mountains. (Placeholder)",
+    "date": "2023-10-27T10:00:00.000Z"
+  },
+  {
+    "id": "2",
+    "src": "/uploads/placeholder-2.svg",
+    "title": "Urban Nights",
+    "description": "City lights in the rain. (Placeholder)",
+    "date": "2023-10-28T10:00:00.000Z"
+  },
+  {
+    "id": "3",
+    "src": "/uploads/placeholder-3.svg",
+    "title": "Minimal Portrait",
+    "description": "Studio lighting experiment. (Placeholder)",
+    "date": "2023-10-29T10:00:00.000Z"
+  }
+]
