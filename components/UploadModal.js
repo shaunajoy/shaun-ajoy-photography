@@ -68,18 +68,26 @@ export default function UploadModal({ onClose }) {
                     router.refresh();
                 }, 1500);
             } else {
-                let errorMsg = "Unknown server error";
+                let errorMsg = `Server error (${res.status})`;
                 try {
-                    const errorData = await res.json();
-                    errorMsg = errorData.error || errorMsg;
-                } catch (e) {}
+                    const text = await res.text();
+                    try {
+                        const errorData = JSON.parse(text);
+                        errorMsg = errorData.error || errorMsg;
+                    } catch (parseError) {
+                        // If not JSON, show start of the response (might be HTML error page from Vercel)
+                        errorMsg += ": " + text.substring(0, 100);
+                    }
+                } catch (e) {
+                    errorMsg += " - Could not read response body";
+                }
                 console.error("Client: Server error:", errorMsg);
                 alert("Upload failed: " + errorMsg);
                 setStatus('error');
             }
         } catch (error) {
             console.error("Client: Fetch error:", error);
-            alert("Upload failed (Fetch Error): " + error.message);
+            alert("Upload failed (Network/Fetch Error): " + error.message);
             setStatus('error');
         } finally {
             setUploading(false);
