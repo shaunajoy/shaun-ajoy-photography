@@ -38,7 +38,11 @@ export default function UploadModal({ onClose }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!file) return;
+        console.log("Client: handleSubmit triggered");
+        if (!file) {
+            alert("No file selected");
+            return;
+        }
 
         setUploading(true);
         setStatus('idle');
@@ -49,22 +53,33 @@ export default function UploadModal({ onClose }) {
         formData.append('description', e.target.description.value);
 
         try {
+            console.log("Client: Sending POST request to /api/photos");
             const res = await fetch('/api/photos', {
                 method: 'POST',
                 body: formData,
             });
 
             if (res.ok) {
+                const data = await res.json();
+                console.log("Client: Upload successful", data);
                 setStatus('success');
                 setTimeout(() => {
                     onClose();
                     router.refresh();
                 }, 1500);
             } else {
+                let errorMsg = "Unknown server error";
+                try {
+                    const errorData = await res.json();
+                    errorMsg = errorData.error || errorMsg;
+                } catch (e) {}
+                console.error("Client: Server error:", errorMsg);
+                alert("Upload failed: " + errorMsg);
                 setStatus('error');
             }
         } catch (error) {
-            console.error(error);
+            console.error("Client: Fetch error:", error);
+            alert("Upload failed (Fetch Error): " + error.message);
             setStatus('error');
         } finally {
             setUploading(false);
