@@ -19,26 +19,40 @@ export async function GET() {
 }
 
 export async function POST(request) {
+    console.log("POST /api/photos upload requested");
     try {
         const formData = await request.formData();
         const file = formData.get('file');
         const title = formData.get('title') || 'Untitled';
         const description = formData.get('description') || '';
 
+        console.log(`Received file: ${file?.name}, size: ${file?.size}, title: ${title}`);
+
         if (!file) {
+            console.error("No file in formData");
             return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
         }
 
         const bytes = await file.arrayBuffer();
         const buffer = new Uint8Array(bytes);
+        console.log("Converted file to Uint8Array");
 
         // Create unique filename
         const filename = `${Date.now()}-${file.name.replace(/\s+/g, '-').toLowerCase()}`;
         const storageRef = ref(storage, 'uploads/' + filename);
+        console.log(`Uploading to storage path: uploads/${filename}`);
 
         // Upload to Firebase Storage
-        await uploadBytes(storageRef, buffer);
+        try {
+            await uploadBytes(storageRef, buffer);
+            console.log("Upload to Storage successful");
+        } catch (storageErr) {
+            console.error("Firebase Storage upload failed:", storageErr);
+            throw new Error(`Storage error: ${storageErr.message}`);
+        }
+
         const downloadURL = await getDownloadURL(storageRef);
+        console.log(`Got download URL: ${downloadURL}`);
 
         // Save metadata to Firestore
         const newPhoto = {
@@ -46,14 +60,20 @@ export async function POST(request) {
             title,
             description,
             date: new Date().toISOString(),
-            storagePath: 'uploads/' + filename // Keep track of storage path for deletion
+            storagePath: 'uploads/' + filename
         };
 
-        const docRef = await addDoc(collection(db, "photos"), newPhoto);
+        try {
+            const docRef = await addDoc(collection(db, "photos"), newPhoto);
+            console.log(`Saved to Firestore with ID: ${docRef.id}`);
+            return NextResponse.json({ id: docRef.id, ...newPhoto }, { status: 201 });
+        } catch (dbErr) {
+            console.error("Firestore save failed:", dbErr);
+            throw new Error(`Database error: ${dbErr.message}`);
+        }
 
-        return NextResponse.json({ id: docRef.id, ...newPhoto }, { status: 201 });
     } catch (error) {
-        console.error('Upload error:', error);
+        console.error('Final upload catch error:', error);
         return NextResponse.json({ error: 'Upload failed: ' + error.message }, { status: 500 });
     }
 }
@@ -84,9 +104,6 @@ export async function DELETE(request) {
             } catch (storageError) {
                 console.warn("Could not delete file from storage (might already be gone):", storageError);
             }
-        } else if (photoData.src && photoData.src.includes('firebasestorage')) {
-            // Fallback: try to derive ref from URL if storagePath wasn't saved (legacy)
-            // simplified for now, assuming storagePath is saved for new photos
         }
 
         // Delete from Firestore
